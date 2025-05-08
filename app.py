@@ -32,7 +32,8 @@ with st.sidebar:
 # ---- Main UI ----
 st.title("📊 AI Data Chatbot")
 st.markdown("Upload your data file and start asking questions in natural language or SQL!")
-
+if "file_uploader" in st.session_state:
+    del st.session_state["file_uploader"]
 # ---- DB Connection ----
 def connect_to_db():
     return sqlite3.connect('data.db')
@@ -353,7 +354,8 @@ if 'clear_input' not in st.session_state:
 # ---- File Upload ----
 uploaded_file = st.file_uploader(
     "Upload your file",
-    type=["csv", "xlsx", "json", "txt", "pdf", "xml"]
+    type=["csv", "xlsx", "json", "txt", "pdf", "xml"],
+    key="file_uploader"
 )
 
 if uploaded_file:
