@@ -5,3 +5,4 @@ openai
 xmltodict
 pdfplumber
 requests
+openpyxl
