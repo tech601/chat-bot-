@@ -1,0 +1,7 @@
+streamlit
+pandas
+duckdb
+openai
+xmltodict
+pdfplumber
+requests
