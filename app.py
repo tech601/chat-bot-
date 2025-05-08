@@ -351,18 +351,7 @@ if 'clear_input' not in st.session_state:
     st.session_state.clear_input = False
 
 # ---- File Upload ----
-import streamlit as st
-
-# Clear file_uploader session state if it exists (optional but helps)
-if "file_uploader" in st.session_state:
-    del st.session_state["file_uploader"]
-
-uploaded_file = st.file_uploader(
-    "Upload your file",
-    type=["csv", "xlsx", "json", "txt", "pdf", "xml"],
-    key="file_uploader"
-)
-
+uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"])
 
 # ---- Main Logic ----
 if uploaded_file:
