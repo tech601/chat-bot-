@@ -391,6 +391,7 @@ if uploaded_file:
                     # Show the sections found
                     with st.expander("Document Sections"):
                         for i, row in df.iterrows():
+                            st.markdown(f"**{row.get('title', 'No Title')}**")
                             st.markdown(f"**{row['title']}**")
                             st.text(row['content'][:200] + "..." if len(row['content']) > 200 else row['content'])
             else:
