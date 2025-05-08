@@ -32,8 +32,7 @@ with st.sidebar:
 # ---- Main UI ----
 st.title("📊 AI Data Chatbot")
 st.markdown("Upload your data file and start asking questions in natural language or SQL!")
-if "file_uploader" in st.session_state:
-    del st.session_state["file_uploader"]
+
 # ---- DB Connection ----
 def connect_to_db():
     return sqlite3.connect('data.db')
@@ -352,14 +351,7 @@ if 'clear_input' not in st.session_state:
     st.session_state.clear_input = False
 
 # ---- File Upload ----
-uploaded_file = st.file_uploader(
-    "Upload your file",
-    type=["csv", "xlsx", "json", "txt", "pdf", "xml"],
-    key="file_uploader"
-)
-
-if uploaded_file:
-    st.success(f"{uploaded_file.name} uploaded successfully!")
+uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"])
 
 # ---- Main Logic ----
 if uploaded_file:
@@ -400,6 +392,7 @@ if uploaded_file:
                     with st.expander("Document Sections"):
                         for i, row in df.iterrows():
                             st.markdown(f"**{row.get('title', 'No Title')}**")
+
                             st.markdown(f"**{row['title']}**")
                             st.text(row['content'][:200] + "..." if len(row['content']) > 200 else row['content'])
             else:
