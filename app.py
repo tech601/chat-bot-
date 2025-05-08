@@ -363,26 +363,6 @@ uploaded_file = st.file_uploader(
     key="file_uploader"
 )
 
-if uploaded_file:
-    st.success(f"{uploaded_file.name} uploaded successfully!")
-
-    # Display file type for debugging
-    st.write("File type:", uploaded_file.type)
-
-    # Add PDF support
-    if uploaded_file.type == "application/pdf":
-        import fitz  # PyMuPDF
-        pdf_reader = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        text = ""
-        for page in pdf_reader:
-            text += page.get_text()
-        st.text_area("PDF Content", text)
-
-    # Add Excel support
-    elif uploaded_file.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
-        import pandas as pd
-        df = pd.read_excel(uploaded_file)
-        st.dataframe(df)
 
 # ---- Main Logic ----
 if uploaded_file:
