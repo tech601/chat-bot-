@@ -351,7 +351,63 @@ if 'clear_input' not in st.session_state:
     st.session_state.clear_input = False
 
 # ---- File Upload ----
-uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"])
+uploaded_file = st.file_uploader("Upload your file", type=["csv", "xlsx", "json", "txt", "pdf", "xml"])
+
+if uploaded_file is not None:
+    filename = uploaded_file.name.lower()
+
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+            st.success("CSV file loaded successfully.")
+            st.write(df)
+
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(uploaded_file)
+            st.success("Excel file loaded successfully.")
+            st.write(df)
+
+        elif filename.endswith(".json"):
+            df = pd.read_json(uploaded_file)
+            st.success("JSON file loaded successfully.")
+            st.write(df)
+
+        elif filename.endswith(".txt"):
+            content = uploaded_file.read().decode("utf-8")
+            st.success("Text file loaded successfully.")
+            st.text(content)
+
+        elif filename.endswith(".pdf"):
+            pdf = PdfReader(uploaded_file)
+            text = ""
+            for page in pdf.pages:
+                text += page.extract_text()
+            st.success("PDF file loaded successfully.")
+            st.text(text)
+
+        elif filename.endswith(".xml"):
+            tree = ET.parse(uploaded_file)
+            root = tree.getroot()
+            xml_data = []
+
+            for child in root:
+                row = {}
+                for elem in child:
+                    row[elem.tag] = elem.text
+                xml_data.append(row)
+
+            if xml_data:
+                df = pd.DataFrame(xml_data)
+                st.success("XML file loaded successfully.")
+                st.write(df)
+            else:
+                st.warning("No data found in XML.")
+
+        else:
+            st.error("Unsupported file type!")
+
+    except Exception as e:
+        st.error(f"Failed to process file: {e}")
 
 # ---- Main Logic ----
 if uploaded_file:
