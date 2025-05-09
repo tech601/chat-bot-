@@ -352,11 +352,7 @@ if 'clear_input' not in st.session_state:
 
 # ---- File Upload ----
 # --- Safe reset for file uploader state on Streamlit Cloud ---
-if 'file_uploader' in st.session_state:
-    del st.session_state['file_uploader']
-
-uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"], key="file_uploader")
-
+uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"])
 # ---- Main Logic ----
 if uploaded_file:
     # Process the file
