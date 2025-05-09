@@ -6,6 +6,7 @@ import json
 import xmltodict
 import pdfplumber
 import requests
+from io import StringIO, BytesIO
 import re
 
 # ---- Page Configuration ----
@@ -64,53 +65,63 @@ def flatten_xml(data_dict):
 # ---- Get sample values safely ----
 def get_safe_sample(series, n=3):
     """Get sample values from a series, handling empty series safely"""
+    # Drop NA values
     non_null = series.dropna()
+    
+    # If there are no non-null values, return empty list
     if len(non_null) == 0:
         return ["No non-null values"]
+    
+    # If there are fewer values than requested, return all
     if len(non_null) <= n:
         return non_null.tolist()
+    
+    # Otherwise sample n values
     return non_null.sample(n).tolist()
 
 # ---- PDF Processing ----
 def process_pdf(file):
-    try:
-        file.seek(0)  # Reset file pointer before reading
-        full_text = ""
-        sections = []
-        current_section = {"title": "Introduction", "content": ""}
+    # Extract text from PDF
+    full_text = ""
+    sections = []
+    current_section = {"title": "Introduction", "content": ""}
 
-        with pdfplumber.open(file) as pdf:
-            for page_num, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                if text:
-                    full_text += text + "\n"
+    with pdfplumber.open(file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
 
-                    lines = text.split('\n')
-                    for line in lines:
-                        stripped_line = line.strip()
-                        # Identify section headers (short, capitalized, non-digit start)
-                        if len(stripped_line) < 50 and stripped_line and not stripped_line[0].isdigit():
-                            if current_section["content"]:
-                                sections.append(current_section)
-                            current_section = {"title": stripped_line, "content": ""}
-                        else:
-                            current_section["content"] += line + "\n"
+                # Try to identify section headers
+                lines = text.split('\n')
+                for line in lines:
+                    # Check if line is likely a section header (short, capitalized)
+                    stripped_line = line.strip()
+                    if len(stripped_line) < 50 and stripped_line and not stripped_line[0].isdigit():
+                        # If it looks like a header, start a new section
+                        if current_section["content"]:
+                            sections.append(current_section)
+                        current_section = {"title": stripped_line, "content": ""}
+                    else:
+                        current_section["content"] += line + "\n"
 
-            if current_section["content"]:
-                sections.append(current_section)
+    # Add the last section
+    if current_section["content"]:
+        sections.append(current_section)
 
-        df = pd.DataFrame(sections)
-        pages_df = pd.DataFrame({
-            "page_num": range(1, len(pdf.pages) + 1),
-            "page_content": [page.extract_text() or "" for page in pdf.pages]
-        })
+    # Create a DataFrame from the sections
+    df = pd.DataFrame(sections)
 
-        st.session_state.pdf_full_text = full_text
-        return df, pages_df
+    # Also create a DataFrame with page-by-page content
+    pages_df = pd.DataFrame({
+        "page_num": range(1, len(pdf.pages) + 1),
+        "page_content": [page.extract_text() or "" for page in pdf.pages]
+    })
 
-    except Exception as e:
-        st.error(f"Error processing PDF: {e}")
-        return None, None
+    # Store the full text in session state for semantic search
+    st.session_state.pdf_full_text = full_text
+
+    return df, pages_df
 
 # ---- File Parsing ----
 def parse_file(file):
@@ -119,9 +130,11 @@ def parse_file(file):
     if file_type == 'csv':
         return pd.read_csv(file)
 
-    elif file_type in ['xlsx', 'xls']:
+    elif file_type == 'xlsx' or file_type == 'xls':
         try:
+            # Force pandas to use openpyxl and never fall back to xlrd
             import pandas
+            # Temporarily disable the xlrd import
             original_import = pandas.io.excel._base.import_optional_dependency
 
             def mock_import(name, **kwargs):
@@ -129,9 +142,15 @@ def parse_file(file):
                     return None
                 return original_import(name, **kwargs)
 
+            # Replace the import function
             pandas.io.excel._base.import_optional_dependency = mock_import
+
+            # Now read the Excel file
             result = pd.read_excel(file, engine='openpyxl')
+
+            # Restore the original import function
             pandas.io.excel._base.import_optional_dependency = original_import
+
             return result
         except Exception as e:
             st.error(f"Excel reading error: {str(e)}")
@@ -152,10 +171,15 @@ def parse_file(file):
             return None
 
     elif file_type == 'pdf':
+        # Special handling for PDFs
         st.session_state.is_pdf = True
         sections_df, pages_df = process_pdf(file)
+
+        # Store both dataframes in session state
         st.session_state.pdf_sections = sections_df
         st.session_state.pdf_pages = pages_df
+
+        # Return the sections dataframe as the main one
         return sections_df
 
     else:
@@ -299,12 +323,15 @@ Your answer should be:
 
 # ---- Detect if input is SQL ----
 def is_sql_query(text):
+    # Simple heuristic to detect if text is likely SQL
     sql_keywords = ['select', 'from', 'where', 'group by', 'order by', 'having', 'join', 'inner join', 'left join']
     text_lower = text.lower()
 
+    # Check if it starts with SELECT
     if text_lower.strip().startswith('select'):
         return True
 
+    # Check if it contains multiple SQL keywords
     keyword_count = sum(1 for keyword in sql_keywords if keyword in text_lower)
     if keyword_count >= 2:
         return True
@@ -328,6 +355,7 @@ uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "j
 
 # ---- Main Logic ----
 if uploaded_file:
+    # Process the file
     if 'df' not in st.session_state or st.session_state.get('last_file') != uploaded_file.name:
         with st.spinner("Processing your file..."):
             df = parse_file(uploaded_file)
@@ -336,6 +364,7 @@ if uploaded_file:
                 st.session_state.df = df
                 st.session_state.last_file = uploaded_file.name
 
+                # Only insert into DB if not a PDF
                 if not st.session_state.get('is_pdf', False):
                     insert_data_to_db(df)
 
@@ -345,22 +374,30 @@ if uploaded_file:
                 st.subheader("Data Preview")
                 st.dataframe(df.head())
 
-                # Show column information
+                # Show column information - Fix for PyArrow error
                 st.subheader("Column Information")
                 col_info = pd.DataFrame({
                     'Column': df.columns,
-                    'Type': [str(dtype) for dtype in df.dtypes],
+                    'Type': [str(dtype) for dtype in df.dtypes],  # Convert dtype objects to strings
                     'Non-Null Count': df.count().tolist(),
-                    'Sample Values': [str(get_safe_sample(df[col])) for col in df.columns]
+                    'Sample Values': [str(get_safe_sample(df[col])) for col in df.columns]  # Use safe sampling
                 })
                 st.dataframe(col_info)
 
                 # If it's a PDF, show additional information
                 if st.session_state.get('is_pdf', False):
                     st.info("📄 PDF detected! You can ask questions about the content of the document.")
+
+                    # Show the sections found
                     with st.expander("Document Sections"):
                         for i, row in df.iterrows():
-                            st.markdown(f"**{row['title']}**")
+                            st.markdown(f"**{row.get('title', 'No Title')}**")
+
+                            if 'title' in row:
+                                st.markdown(f"**{row['title']}**")
+                            else:
+                                st.markdown("**(No title)**")
+
                             st.text(row['content'][:200] + "..." if len(row['content']) > 200 else row['content'])
             else:
                 st.error("❌ Failed to parse file.")
@@ -368,6 +405,7 @@ if uploaded_file:
         df = st.session_state.df
         st.success("✅ Using previously loaded data")
 
+        # Display a sample of the data
         with st.expander("Data Preview", expanded=False):
             st.dataframe(df.head())
 
@@ -386,76 +424,103 @@ if uploaded_file:
                 if 'data' in message:
                     st.dataframe(message['data'])
 
+    # Create a unique key for each session to force input field recreation
     if 'input_key' not in st.session_state:
         st.session_state.input_key = 0
 
+    # Input for new message with dynamic key
     user_input = st.text_input("Ask a question about your data", key=f"user_input_{st.session_state.input_key}")
 
+    # Process button
     if st.button("Send") and user_input:
+        # Add user message to chat history
         st.session_state.chat_history.append({'role': 'user', 'content': user_input})
 
+        # Process the query
         with st.spinner("Processing your question..."):
+            # Check if we're dealing with a PDF
             if st.session_state.get('is_pdf', False):
+                # Use semantic search for PDFs
                 if not api_key and not groq_key:
                     response = "⚠️ Please enter an OpenAI or Groq API key in the sidebar to ask questions about PDF documents."
                 else:
                     response = semantic_search_pdf(user_input, st.session_state.pdf_full_text)
 
+                # Add response to chat history
                 st.session_state.chat_history.append({
                     'role': 'assistant',
                     'content': response
                 })
+
+            # For non-PDF files, use the existing SQL approach
             else:
+                # Check if it's a SQL query
                 if is_sql_query(user_input):
                     try:
+                        # Execute SQL directly
                         result = query_db(user_input)
+
+                        # Add response to chat history
                         st.session_state.chat_history.append({
                             'role': 'assistant',
                             'content': f"Here's the result of your SQL query:",
                             'data': result
                         })
                     except Exception as e:
+                        # Add error to chat history
                         st.session_state.chat_history.append({
                             'role': 'assistant',
                             'content': f"❌ Error executing SQL: {str(e)}"
                         })
                 else:
+                    # Natural language query
                     sql_query = get_sql_from_prompt(user_input, list(df.columns))
 
                     if sql_query == "API_KEY_REQUIRED":
+                        # Add error to chat history
                         st.session_state.chat_history.append({
                             'role': 'assistant',
                             'content': "⚠️ Please enter an OpenAI or Groq API key in the sidebar to use natural language queries."
                         })
                     elif "❌" in sql_query:
+                        # Add error to chat history
                         st.session_state.chat_history.append({
                             'role': 'assistant',
                             'content': sql_query
                         })
                     else:
                         try:
+                            # Execute the generated SQL
                             result = query_db(sql_query)
+
+                            # Add response to chat history
                             st.session_state.chat_history.append({
                                 'role': 'assistant',
                                 'content': f"I converted your question to SQL: \n```sql\n{sql_query}\n```\n\nHere's the result:",
                                 'data': result
                             })
                         except Exception as e:
+                            # Add error to chat history
                             st.session_state.chat_history.append({
                                 'role': 'assistant',
                                 'content': f"I generated this SQL: \n```sql\n{sql_query}\n```\n\n❌ But there was an error: {str(e)}"
                             })
 
+        # Increment the input key to force recreation of the input field (clearing it)
         st.session_state.input_key += 1
-        st.experimental_rerun()
 
+        # Use st.rerun() to update the UI
+        st.rerun()
+
+    # Clear chat button
     if st.button("Clear Chat"):
         st.session_state.chat_history = []
-        st.experimental_rerun()
+        st.rerun()
 
 else:
     st.info("👆 Please upload a file to get started!")
 
+    # Show sample queries
     st.markdown("### Sample queries you can try after uploading data:")
     st.markdown("""
     - "What is the total revenue by segment?"
