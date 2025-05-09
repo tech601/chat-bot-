@@ -6,4 +6,3 @@ xmltodict
 pdfplumber
 requests
 openpyxl
-uuid
