@@ -351,7 +351,7 @@ if 'clear_input' not in st.session_state:
     st.session_state.clear_input = False
 
 # ---- File Upload ----
-uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"])
+uploaded_file = st.file_uploader("Upload a file", type=["csv", "xlsx", "xls", "json", "xml", "pdf"], key="file_uploader")
 
 # ---- Main Logic ----
 if uploaded_file:
